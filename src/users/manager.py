@@ -1,43 +1,34 @@
+"""
+User manager
+"""
+
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter
-from fastapi_users import FastAPIUsers
+from fastapi import Depends, Request
+from fastapi_users import BaseUserManager, UUIDIDMixin
 
-from .models import User
-from .manager import get_user_manager
-from .auth import auth_backend
-from .schemas import UserRead, UserCreate, UserUpdate
+from src.environs import USER_MANAGER_SECRET
+from .models import User, get_user_db
 
-fastapi_users = FastAPIUsers[User, uuid.UUID](
-    get_user_manager,
-    [auth_backend],
-)
 
-users_router = APIRouter(
-    prefix="/api/users",
-    tags=["Users"]
-)
+class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
+    reset_password_token_secret = USER_MANAGER_SECRET
+    verification_token_secret = USER_MANAGER_SECRET
 
-users_router.include_router(
-    fastapi_users.get_auth_router(auth_backend),
-    prefix="/auth",
-    tags=["Auth"]
-)
+    async def on_after_register(self, user: User, request: Optional[Request] = None):
+        print(f"User {user.id} has registered.")
 
-users_router.include_router(
-    fastapi_users.get_register_router(
-        user_schema=UserRead,
-        user_create_schema=UserCreate
-    ),
-    prefix="/register",
-    tags=["Register"]
-)
+    async def on_after_forgot_password(
+        self, user: User, token: str, request: Optional[Request] = None
+    ):
+        print(f"User {user.id} has forgot their password. Reset token: {token}")
 
-users_router.include_router(
-    fastapi_users.get_users_router(
-        user_schema=UserRead,
-        user_update_schema=UserUpdate
-    ),
-    prefix="/users",
-    tags=["Users"]
-)
+    async def on_after_request_verify(
+        self, user: User, token: str, request: Optional[Request] = None
+    ):
+        print(f"Verification requested for user {user.id}. Verification token: {token}")
+
+
+async def get_user_manager(user_db=Depends(get_user_db)):
+    yield UserManager(user_db)
