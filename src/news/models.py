@@ -62,4 +62,4 @@ class Comment(Base):
     )
 
     news: Mapped[News] = relationship("News", back_populates="comments")
-    user: Mapped[User] = relationship("User", back_populates="comments")
+    # user: Mapped[User] = relationship("User", back_populates="comments")
