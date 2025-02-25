@@ -2,10 +2,13 @@
 __init__.py
 """
 
-from .categories import router as categories_router
-from .news import router as news_router
+from .categories import CategoryService
+from .news import NewsService
+from .comments import CommentService
+
 
 __all__ = [
-    "categories_router",
-    "news_router",
+    "CategoryService",
+    "NewsService",
+    "CommentService",
 ]

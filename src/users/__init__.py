@@ -2,8 +2,9 @@
 __init__.py
 """
 
-from .routers import users_router
+from .auth import *
+from .manager import *
+from .models import *
+from .routers import *
+from .schemas import *
 
-__all__ = [
-    "users_router",
-]

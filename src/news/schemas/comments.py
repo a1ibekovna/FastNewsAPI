@@ -11,3 +11,10 @@ class CommentReadSchema(BaseModel):
     created: datetime
     updated: datetime
     user_id: UUID
+    
+    class Config:
+        from_attributes = True
+
+class CommentCreateSchema(BaseModel):
+    text: str
+    news_id: int

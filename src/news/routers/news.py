@@ -1,110 +1,122 @@
 """
-News Router
+Services module contains business logic
 """
 
-from typing import Sequence, Annotated
+import asyncio
+from typing import Sequence
 
-from fastapi import APIRouter, Depends, Form, File, UploadFile
+from fastapi import HTTPException
+
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
-from src.database import get_db
-
-from ..services import NewsService
-from ..schemas import NewsReadSchema, NewsReadDetailsSchema
 from ..models import News
+from ..utils import save_media
+from .categories import CategoryService
 
-router = APIRouter(
-    prefix="/news",
-    tags=["News"]
-)
-
-
-@router.get("", response_model=Sequence[NewsReadSchema])
-async def get_news(offset: int = 0, limit: int = 10, db: AsyncSession = Depends(get_db)) -> Sequence[News]:
-    """
-    Get all news
-    """
-    return await NewsService.get_news(db=db, offset=offset, limit=limit)
+from src.manager import DBManager
 
 
-@router.get("/{news_id}", response_model=NewsReadDetailsSchema)
-async def get_news_object(news_id: int, db: AsyncSession = Depends(get_db)) -> News:
-    """
-    Get news by id
-    """
-    return await NewsService.get_news_object(db=db, news_id=news_id)
+class NewsService():
+
+    @classmethod
+    async def get_news(
+        cls,
+        db: AsyncSession,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> Sequence[News]:
+        """
+        Service
+        """
+        return await DBManager.get_objects(db, model=News, offset=offset, limit=limit)
 
 
-@router.post("", response_model=NewsReadSchema)
-async def create_news_object(
-    title:          Annotated[str, Form()],
-    images:         Annotated[list[UploadFile], File()],
-    category_id:    Annotated[int, Form()],
-    content:        Annotated[str | None, Form()] = None,
-    db:             AsyncSession = Depends(get_db),
-) -> News:
-    "Creates a news object"
-    return await NewsService.create_news(
-        db=db,
-        news={
-            "title": title,
-            "content": content,
-            "images": images,
-            "category_id": category_id
-        }
-    )
+    @classmethod
+    async def get_news_object(
+        cls,
+        db: AsyncSession,
+        news_id: int,
+    ) -> News:
+        """
+        Service
+        """
+        news = await DBManager.get_object(db=db, model=News, field="id", value=news_id, option=joinedload(News.category))
+        if news is None:
+            raise HTTPException(status_code=404, detail="News not found")
+        return news
 
 
-@router.put("/{news_id}", response_model=NewsReadSchema)
-async def update_news(
-    news_id:        int,
-    title:          Annotated[str, Form()],
-    images:         Annotated[list[UploadFile], File()],
-    category_id:    Annotated[int, Form()],
-    content:        Annotated[str, Form()],
-    db:             AsyncSession = Depends(get_db),
-) -> News:
-    """
-    Updates a news object by id
-    """
-    return await NewsService.update_news(
-        db=db,
-        news_id=news_id,
-        news={
-            "title": title,
-            "images": images,
-            "category_id": category_id,
-            "content": content
-        }
-    )
+    @classmethod
+    async def create_news(
+        cls,
+        db: AsyncSession,
+        news: dict
+    ) -> News:
+        """
+        Service
+        """
+
+        await CategoryService.get_category(db, category_id=news["category_id"])
+
+        news["images"] = await asyncio.gather(*[save_media(file) for file in news["images"]])
+
+        return await DBManager.create_object(**news, db=db, model=News, commit=True)
 
 
-@router.patch("/{news_id}", response_model=NewsReadSchema)
-async def partial_update_news(
-    news_id:        int,
-    title:          Annotated[str | None, Form()] = None,
-    images:         Annotated[list[UploadFile], File()] = [],
-    category_id:    Annotated[int | None, Form()] = None,
-    content:        Annotated[str | None, Form()] = None,
-    db:             AsyncSession = Depends(get_db),
-) -> News:
-    """
-    Partially updates a news object by id
-    """
-    return await NewsService.partial_update_news(
-        db=db,
-        news_id=news_id,
-        news={
-            "title": title,
-            "images": images,
-            "category_id": category_id,
-            "content": content
-        }
-    )
+    @classmethod
+    async def delete_news(
+        cls,
+        db: AsyncSession,
+        news_id: int
+    ) -> None:
+        """
+        Service
+        """
+        await DBManager.delete_object(db=db, model=News, field="id", value=news_id, commit=True)
 
-@router.delete("/{news_id}", status_code=204)
-async def delete_news_object(news_id: int, db: AsyncSession = Depends(get_db)) -> None:
-    """
-    Deletes a news object by id
-    """
-    return await NewsService.delete_news(db=db, news_id=news_id)
+
+    @classmethod
+    async def update_news(
+        cls,
+        db: AsyncSession,
+        news_id: int,
+        news: dict,
+    ) -> News:
+        """
+        Service
+        """
+
+        await CategoryService.get_category(db=db, category_id=news["category_id"])
+
+        news["images"] = await asyncio.gather(*[save_media(file) for file in news["images"]])
+
+        news = await DBManager.update_object(**news, db=db, model=News, field="id", value=news_id, commit=True)
+
+        if news is None:
+            raise HTTPException(status_code=404, detail="News not found")
+        return news
+
+
+    @classmethod
+    async def partial_update_news(
+        cls,
+        db: AsyncSession,
+        news_id: int,
+        news: dict,
+    ) -> News:
+        """
+        Service
+        """
+
+        if news["category_id"]:
+            await CategoryService.get_category(db=db, category_id=news["category_id"])
+
+        if news["images"]:
+            news["images"] = await asyncio.gather(*[save_media(file) for file in news["images"]])
+
+        news = await DBManager.partial_update_object(**news, db=db, model=News, field="id", value=news_id, commit=True)
+
+        if news is None:
+            raise HTTPException(status_code=404, detail="News not found")
+        return news

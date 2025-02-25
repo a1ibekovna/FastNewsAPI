@@ -147,3 +147,16 @@ class DBManager():
             await db.refresh(instance)
 
         return instance
+
+
+    @staticmethod
+    async def exists(
+        db: AsyncSession, 
+        model: Any, 
+        field: str,
+        value: Any) -> bool:
+        query = select(model).filter(getattr(model, field) == value)
+
+        result = await db.execute(query)
+        
+        return result.scalar_one_or_none() is not None
